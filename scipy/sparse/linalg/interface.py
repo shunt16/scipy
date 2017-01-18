@@ -445,6 +445,13 @@ class LinearOperator(object):
         return _CustomLinearOperator(shape, matvec=self.rmatvec,
                                      rmatvec=self.matvec,
                                      dtype=self.dtype)
+    
+    def _transpose(self):
+        """Default implementation of _transpose; defers to rmatvec."""
+        shape = (self.shape[1], self.shape[0])
+        return _CustomLinearOperator(shape, matvec=self.rmatvec,
+                                     rmatvec=self.matvec,
+                                     dtype=self.dtype)
 
 
 class _CustomLinearOperator(LinearOperator):
@@ -481,6 +488,12 @@ class _CustomLinearOperator(LinearOperator):
                                      matvec=self.__rmatvec_impl,
                                      rmatvec=self.__matvec_impl,
                                      dtype=self.dtype)
+    
+    def _transpose(self):
+        shape = (self.shape[1], self.shape[0])
+        return _CustomLinearOperator(shape, matvec=self.__rmatvec_impl,
+                                     rmatvec=self.__matvec_impl,
+                                     dtype=self.dtype)
 
 
 def _get_dtype(operators, dtypes=None):
@@ -515,6 +528,10 @@ class _SumLinearOperator(LinearOperator):
     def _adjoint(self):
         A, B = self.args
         return A.H + B.H
+    
+    def _transpose(self):
+        A, B = self.args
+        return A.T + B.T
 
 
 class _ProductLinearOperator(LinearOperator):
@@ -541,6 +558,10 @@ class _ProductLinearOperator(LinearOperator):
     def _adjoint(self):
         A, B = self.args
         return B.H * A.H
+    
+    def _transpose(self):
+        A, B = self.args
+        return B.T * A.T
 
 
 class _ScaledLinearOperator(LinearOperator):
@@ -565,6 +586,10 @@ class _ScaledLinearOperator(LinearOperator):
     def _adjoint(self):
         A, alpha = self.args
         return A.H * alpha
+    
+    def _transpose(self):
+        A, alpha = self.args
+        return A.T * alpha
 
 
 class _PowerLinearOperator(LinearOperator):
@@ -598,12 +623,17 @@ class _PowerLinearOperator(LinearOperator):
         A, p = self.args
         return A.H ** p
 
+    def _transpose(self):
+        A, p = self.args
+        return A.T ** p
+
 
 class MatrixLinearOperator(LinearOperator):
     def __init__(self, A):
         super(MatrixLinearOperator, self).__init__(A.dtype, A.shape)
         self.A = A
         self.__adj = None
+        self.__trans = None
         self.args = (A,)
 
     def _matmat(self, X):
@@ -613,6 +643,12 @@ class MatrixLinearOperator(LinearOperator):
         if self.__adj is None:
             self.__adj = _AdjointMatrixOperator(self)
         return self.__adj
+    
+    def _transpose(self):
+        if self.__trans is None:
+            self.__trans = _TransposeMatrixOperator(self)
+        return self.__trans
+    
 
 
 class _AdjointMatrixOperator(MatrixLinearOperator):
@@ -628,6 +664,20 @@ class _AdjointMatrixOperator(MatrixLinearOperator):
 
     def _adjoint(self):
         return self.__adjoint
+    
+class _TransposeMatrixOperator(MatrixLinearOperator):
+    def __init__(self, transpose):
+        self.T = transpose.A.T
+        self.__transpose = transpose
+        self.args = (transpose,)
+        self.shape = transpose.shape[1], transpose.shape[0]
+
+    @property
+    def dtype(self):
+        return self.__transpose.dtype
+
+    def _transpose(self):
+        return self.__transpose
 
 
 class IdentityOperator(LinearOperator):
@@ -644,6 +694,9 @@ class IdentityOperator(LinearOperator):
         return x
 
     def _adjoint(self):
+        return self
+    
+    def _transpose(self):
         return self
 
 
